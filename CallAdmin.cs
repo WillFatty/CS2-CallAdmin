@@ -36,10 +36,6 @@ public partial class CallAdmin : BasePlugin, IPluginConfig<CallAdminConfig>
     {
       AddCommand($"css_{command}", "Report a player", ReportCommand);
     }
-    foreach (string command in Config.Commands.ReportHandled.Prefix)
-    {
-      AddCommand($"css_{command}", "Handle Report", ReportHandledCommand);
-    }
     foreach (string command in Config.Commands.ReportCanceled.ByAuthor.Prefix)
     {
       AddCommand($"css_{command}", "Cancel last report by author", ReportCancelByAuthor);
@@ -52,10 +48,9 @@ public partial class CallAdmin : BasePlugin, IPluginConfig<CallAdminConfig>
 
     AddCommandListener("say", OnPlayerChat, HookMode.Pre);
     AddCommandListener("say_team", OnPlayerChat, HookMode.Pre);
-    if (Config.Commands.ReportHandled.Enabled)
-    {
-      Task.Run(CreateDatabaseTables);
-    }
+    
+    // Database tables setup should not depend on ReportHandled.Enabled anymore
+    Task.Run(CreateDatabaseTables);
 
     RegisterListener<OnClientDisconnect>(playerSlot =>
     {
@@ -102,7 +97,7 @@ public partial class CallAdmin : BasePlugin, IPluginConfig<CallAdminConfig>
     info.GetArg(1).StartsWith('!') || info.GetArg(1).StartsWith('/') || Array.Exists(Config.ReasonsToIgnore, element => element == info.GetArg(1))) return HookResult.Continue;
     var findTarget = Utilities.GetPlayerFromIndex((int)findPlayer.Target);
 
-    HandleSentToDiscordAsync(player, findTarget!, info.ArgString.Replace("\"", ""));
+    SendReportToApi(player, findTarget!, info.ArgString.Replace("\"", ""));
 
     findPlayer.Target = null;
     findPlayer.HandleMessage = false;

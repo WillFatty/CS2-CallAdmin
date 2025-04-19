@@ -10,54 +10,147 @@ using Microsoft.Extensions.Logging;
 namespace CallAdmin;
 public partial class CallAdmin
 {
-  public async Task<string> SendMessageToDiscord(dynamic json, string? messageId = null)
+  public async Task<bool> CancelReportInAPI(string messageId)
   {
     try
     {
-
       var httpClient = new HttpClient();
-      var content = new StringContent(json, Encoding.UTF8, "application/json");
-      var result = string.IsNullOrEmpty(messageId) ? httpClient.PostAsync($"{Config.WebHookUrl}?wait=true", content).Result : httpClient.PatchAsync($"{Config.WebHookUrl}/messages/{messageId}", content).Result;
-
-      if (!result.IsSuccessStatusCode)
+      httpClient.Timeout = TimeSpan.FromSeconds(10);
+      
+      // Create a proper object and use JsonSerializer instead of manual string construction
+      var requestObj = new { 
+        message_id = messageId,
+        action = "cancel"
+      };
+      
+      var jsonString = JsonSerializer.Serialize(requestObj);
+      var content = new StringContent(jsonString, Encoding.UTF8, "application/json");
+      
+      // Add debug logging
+      Logger.LogInformation($"Sending cancel request to API: {jsonString}");
+      
+      // Post to the main endpoint rather than a separate cancel endpoint
+      var result = await httpClient.PostAsync("https://admin.affinitycs2.com/api/calladmin", content);
+      
+      // Read and log the response for debugging
+      var responseContent = await result.Content.ReadAsStringAsync();
+      Logger.LogInformation($"API response status: {result.StatusCode}, body: {responseContent}");
+      
+      return result.IsSuccessStatusCode;
+    }
+    catch (Exception e)
+    {
+      // Log the full exception details
+      Logger.LogError($"Error in CancelReportInAPI: {e.Message}");
+      Logger.LogError($"Stack trace: {e.StackTrace}");
+      if (e.InnerException != null)
       {
-        Logger.LogError(result.Content.ToString());
-        return "There was an error sending the webhook";
+        Logger.LogError($"Inner exception: {e.InnerException.Message}");
       }
-
-      var toJson = JsonSerializer.Deserialize<IWebHookSuccess>(await result.Content.ReadAsStringAsync());
-      return string.IsNullOrEmpty(toJson?.id) ? "Unable to get message ID" : toJson.id;
-
-    }
-    catch (Exception e)
-    {
-      Logger.LogError(e.Message);
-      throw;
-    }
-  }
-  public class IWebHookSuccess
-  {
-    public required string id { get; set; }
-  }
-  public async Task<bool> DeleteMessageOnDiscord(string messageId)
-  {
-    try
-    {
-      var httpClient = new HttpClient();
-
-      var result = await httpClient.DeleteAsync($"{Config.WebHookUrl}/messages/{messageId}");
-
-      return result.StatusCode == HttpStatusCode.NoContent;
-
-    }
-    catch (Exception e)
-    {
-      Logger.LogError(e.Message);
       return false;
     }
   }
 
-  private void HandleSentToDiscordAsync(CCSPlayerController player, CCSPlayerController target, string reason)
+  public async Task<bool> MarkReportHandledInAPI(string messageId, string adminName, string adminSteamId)
+  {
+    try
+    {
+      var httpClient = new HttpClient();
+      httpClient.Timeout = TimeSpan.FromSeconds(10);
+      
+      var requestObj = new {
+        message_id = messageId,
+        admin_name = adminName,
+        admin_steamid = adminSteamId,
+        action = "handled"
+      };
+      
+      var jsonContent = JsonSerializer.Serialize(requestObj);
+      var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+      
+      // Add debug logging
+      Logger.LogInformation($"Marking report as handled: {jsonContent}");
+      
+      // Post to the main endpoint rather than a separate handled endpoint
+      var result = await httpClient.PostAsync("https://admin.affinitycs2.com/api/calladmin", content);
+      
+      // Read and log the response for debugging
+      var responseContent = await result.Content.ReadAsStringAsync();
+      Logger.LogInformation($"API response status: {result.StatusCode}, body: {responseContent}");
+
+      return result.IsSuccessStatusCode;
+    }
+    catch (Exception e)
+    {
+      // Log the full exception details
+      Logger.LogError($"Error in MarkReportHandledInAPI: {e.Message}");
+      Logger.LogError($"Stack trace: {e.StackTrace}");
+      if (e.InnerException != null)
+      {
+        Logger.LogError($"Inner exception: {e.InnerException.Message}");
+      }
+      return false;
+    }
+  }
+
+  public async Task<string> SendMessageToAPI(dynamic jsonObj)
+  {
+    try
+    {
+      var httpClient = new HttpClient();
+      httpClient.Timeout = TimeSpan.FromSeconds(10);
+      
+      // Simple string content for the JSON
+      var content = new StringContent(jsonObj.ToString(), Encoding.UTF8, "application/json");
+      
+      // Add debug logging
+      Logger.LogInformation($"Sending simplified report to API: {jsonObj}");
+      
+      // Use await properly instead of .Result to avoid potential deadlocks
+      var result = await httpClient.PostAsync("https://admin.affinitycs2.com/api/calladmin", content);
+
+      // Read the response content
+      var responseContent = await result.Content.ReadAsStringAsync();
+      Logger.LogInformation($"API response status: {result.StatusCode}, body: {responseContent}");
+
+      if (!result.IsSuccessStatusCode)
+      {
+        Logger.LogError($"API error response: {result.StatusCode} - {responseContent}");
+        return "There was an error sending the data to API";
+      }
+
+      // Return the identifier that was included in the request - this will be used as the message_id
+      try 
+      {
+        // Try to extract the identifier from our request to use as a unique ID for the database
+        var requestData = System.Text.Json.JsonDocument.Parse(jsonObj.ToString());
+        if (requestData.RootElement.TryGetProperty("identifier", out JsonElement identifierElement))
+        {
+          return identifierElement.GetString() ?? "report-" + Guid.NewGuid().ToString().Substring(0, 8);
+        }
+        return "report-" + Guid.NewGuid().ToString().Substring(0, 8);
+      }
+      catch (Exception ex)
+      {
+        // If parsing fails, generate a unique identifier
+        Logger.LogWarning($"Could not extract identifier from request: {ex.Message}");
+        return "report-" + Guid.NewGuid().ToString().Substring(0, 8);
+      }
+    }
+    catch (Exception e)
+    {
+      // Log the full exception details
+      Logger.LogError($"Error in SendMessageToAPI: {e.Message}");
+      Logger.LogError($"Stack trace: {e.StackTrace}");
+      if (e.InnerException != null)
+      {
+        Logger.LogError($"Inner exception: {e.InnerException.Message}");
+      }
+      throw;
+    }
+  }
+
+  private void SendReportToApi(CCSPlayerController player, CCSPlayerController target, string reason)
   {
     string? hostName = ConVar.Find("hostname")?.StringValue;
     ReportInfos infos = new()
@@ -102,32 +195,31 @@ public partial class CallAdmin
       }
 
       string identifier = RandomString(15);
-      var task2 = await SendMessageToDiscord(
-            Payload(new()
-            {
-              AuthorName = infos.PlayerName,
-              AuthorSteamId = infos.PlayerSteamId,
-              TargetName = infos.TargetName,
-              TargetSteamId = infos.TargetSteamId,
-              HostName = hostName,
-              MapName = infos.MapName,
-              HostIp = Config.ServerIpWithPort,
-              Reason = reason,
-              Identifier = identifier,
-              Type = "EmbedReport"
-            }
-            )
-          );
+      
+      // Create a simplified payload with just the required information
+      var simplifiedPayload = new
+      {
+        author_name = infos.PlayerName,
+        author_steamid = infos.PlayerSteamId,
+        target_name = infos.TargetName,
+        target_steamid = infos.TargetSteamId,
+        reason = reason,
+        server_name = hostName,
+        server_ip = string.IsNullOrEmpty(Config.ServerIpWithPort) ? "Empty" : Config.ServerIpWithPort,
+        map_name = infos.MapName,
+        identifier = identifier
+      };
+      
+      var task2 = await SendMessageToAPI(JsonSerializer.Serialize(simplifiedPayload));
 
-      if (!task2.All(char.IsDigit))
+      if (task2 == "There was an error sending the data to API" || task2 == "Unable to get response ID")
       {
         SendMessageToPlayer(player, $"{Localizer["Prefix"]} {Localizer["WebhookError"]}");
         return;
       }
       SendMessageToPlayer(player, $"{Localizer["Prefix"]} {Localizer["ReportSent"]}");
 
-      if (!Config.Commands.ReportHandled.Enabled) return;
-
+      // Always try to insert into database, not based on ReportHandled.Enabled
       var task3 = await
         InsertIntoDatabase(
           infos.PlayerName,
@@ -135,7 +227,7 @@ public partial class CallAdmin
           infos.TargetName,
           infos.TargetSteamId,
           reason,
-          task2,
+          task2, // Use the identifier as the message_id for database
           identifier,
           hostName,
           string.IsNullOrEmpty(Config.ServerIpWithPort) ? "Empty" : Config.ServerIpWithPort
@@ -185,142 +277,6 @@ public partial class CallAdmin
     });
   }
 
-  public string Payload(PayloadClass payloadClass)
-  {
-    EmbedFormatClass Payload = new();
-    EmbedFormat embedType;
-    if (payloadClass.Type == "EmbedReport")
-      embedType = Config.Embeds.EmbedReport;
-    else if (payloadClass.Type == "EmbedReportCanceled")
-      embedType = Config.Embeds.EmbedReportCanceled;
-    else
-      embedType = Config.Embeds.EmbedReportHandled;
-
-    if (!string.IsNullOrEmpty(embedType.Content)) Payload.content = ReplaceTags(embedType.Content, payloadClass);
-    if (embedType.Embeds != null)
-    {
-      var embeds = embedType.Embeds[0];
-      Payload.embeds = [new()];
-      if (!string.IsNullOrEmpty(embeds.Title)) Payload.embeds[0].title = ReplaceTags(embeds.Title, payloadClass);
-      if (!string.IsNullOrEmpty(embeds.Color)) Payload.embeds[0].color = embeds.Color;
-      if (!string.IsNullOrEmpty(embeds.Timestamp)) Payload.embeds[0].timestamp = embeds.Timestamp;
-      if (!string.IsNullOrEmpty(embeds.Description)) Payload.embeds[0].description = embeds.Description;
-
-      if (embeds.Author != null) Payload.embeds[0].author = new()
-      {
-        icon_url = embeds.Author.Icon_url,
-        name = embeds.Author.Name,
-        url = embeds.Author.Url,
-
-      };
-
-      if (embeds.Thumbnail != null) Payload.embeds[0].thumbnail = new()
-      {
-        url = embeds.Thumbnail.Url,
-      };
-
-      if (embeds.Image != null) Payload.embeds[0].image = new()
-      {
-        url = embeds.Image.Url,
-      };
-
-      if (embeds.Footer != null) Payload.embeds[0].footer = new()
-      {
-        iconUrl = embeds.Footer.IconUrl,
-        text = embeds.Footer.Text,
-      };
-      if (embeds.Fields != null && embeds.Fields.Length > 0)
-      {
-
-        List<EmbedFormatClass.Fields> fieldsList = [];
-        foreach (var field in embeds.Fields)
-        {
-
-          if (string.IsNullOrEmpty(field.Name) || string.IsNullOrEmpty(field.Value))
-          {
-            Logger.LogError("You must provide field name and value. Only inline is optional");
-          }
-          else
-          {
-            fieldsList.Add(new()
-            {
-              name = ReplaceTags(field.Name, payloadClass),
-              value = ReplaceTags(field.Value, payloadClass),
-              inline = field.Inline == null ? false : field.Inline
-            });
-
-          }
-        }
-        Payload.embeds[0].fields = fieldsList.ToArray();
-      }
-    }
-    return JsonSerializer.Serialize(Payload);
-  }
-  public string ReplaceTags(string message, PayloadClass payload)
-  {
-    string? replaceTag(string ocurrence)
-    {
-      ocurrence = ocurrence.Replace("{", "").Replace("}", "");
-
-
-      string[] ocurrenceSplit = ocurrence.Split("|");
-
-      return ocurrenceSplit[0].ToUpper().Trim() switch
-      {
-        "MAPNAME" => payload.MapName,
-        "HOSTNAME" => payload.HostName,
-        "SERVERIP" => payload.HostIp,
-        "AUTHORNAME" => payload.AuthorName,
-        "AUTHORSTEAMID" => payload.AuthorSteamId,
-        "AUTHORPROFILE" => "https://steamcommunity.com/profiles/" + payload.AuthorSteamId,
-        "TARGETNAME" => payload.TargetName,
-        "TARGETSTEAMID" => payload.TargetSteamId,
-        "TARGETPROFILE" => "https://steamcommunity.com/profiles/" + payload.TargetSteamId,
-        "ADMINNAME" => payload.AdminName,
-        "ADMINSTEAMID" => payload.AdminSteamId,
-        "ADMINPROFILE" => payload.TargetSteamId != "null" ? "https://steamcommunity.com/profiles/" + payload.TargetSteamId : "null",
-        "IDENTIFIER" => payload.Identifier,
-        "REASON" => payload.Reason,
-        "REPORTHANDLEDPREFIX" => string.Join(", ", Config.Commands.ReportHandled.Prefix),
-        "CURRENTTIME" => handleCurrentTime(ocurrenceSplit),
-        "LOCALIZER" => Localizer[ocurrence.Split("|")[1]],
-        _ => null,
-      };
-    }
-
-    string[] getAllTags = Regex.Matches(message, @"\{[^{}]*\}")
-                                  .Cast<Match>()
-                                  .Select(match => match.Value)
-                                  .Distinct()
-                                  .ToArray();
-
-    foreach (string occurrence in getAllTags)
-    {
-      string? toReplace = replaceTag(occurrence);
-
-      if (!string.IsNullOrEmpty(toReplace)) message = message.Replace(occurrence, toReplace);
-    }
-
-    string handleCurrentTime(string[] occurrence)
-    {
-
-
-      if (occurrence.Length == 1)
-        return DateTimeOffset.FromUnixTimeMilliseconds(long.Parse((DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000).ToString()) * 1000).ToString();
-      else if (occurrence.Length == 2)
-        return DateTimeOffset.FromUnixTimeMilliseconds(
-          long.Parse(
-            (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000).ToString()) * 1000
-            ).ToOffset(TimeSpan.FromHours(Convert.ToDouble(occurrence[1]))).ToString();
-      else
-        return DateTimeOffset.FromUnixTimeMilliseconds(
-          long.Parse
-          ((DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000).ToString()) * 1000)
-          .ToOffset(TimeSpan.FromHours(occurrence[1] == "null" ? 0 : Convert.ToDouble(occurrence[1]))).ToString(occurrence[2].Replace("}", ""));
-    }
-
-    return message;
-  }
   public bool CanExecuteCommand(int playerSlot)
   {
     if (Config.CooldownRefreshCommandSeconds <= 0) return true;

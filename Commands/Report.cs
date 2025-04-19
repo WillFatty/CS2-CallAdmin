@@ -88,7 +88,7 @@ public partial class CallAdmin
           }
           else
           {
-            HandleSentToDiscordAsync(player, getPlayer!, command.Text);
+            SendReportToApi(player, getPlayer!, command.Text);
           }
         }
       }));

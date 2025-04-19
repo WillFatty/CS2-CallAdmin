@@ -12,7 +12,8 @@ public partial class CallAdmin
   {
     if (config.Version != ConfigVersion) throw new Exception($"You have a wrong config version. Delete it and restart the server to get the right version ({ConfigVersion})!");
 
-    if (config.Commands.ReportHandled.Enabled && (string.IsNullOrEmpty(config.Database.Host) || string.IsNullOrEmpty(config.Database.Name) || string.IsNullOrEmpty(config.Database.User)))
+    // Check database configuration regardless of ReportHandled.Enabled
+    if (string.IsNullOrEmpty(config.Database.Host) || string.IsNullOrEmpty(config.Database.Name) || string.IsNullOrEmpty(config.Database.User))
     {
       throw new Exception($"You need to setup Database credentials in config!");
     }
@@ -20,9 +21,9 @@ public partial class CallAdmin
     {
       throw new Exception($"You need to setup CommandsPrefix in config!");
     }
-    else if (string.IsNullOrEmpty(config.WebHookUrl) || config.Reasons.Length == 0)
+    else if (config.Reasons.Length == 0)
     {
-      throw new Exception($"You need to setup WebHookUrl and Reasons in config!");
+      throw new Exception($"You need to setup Reasons in config!");
     }
     Config = config;
 
@@ -40,7 +41,7 @@ public class CallAdminConfig : BasePluginConfig
   [JsonPropertyName("ReasonsToIgnore")]
   public string[] ReasonsToIgnore { get; set; } = ["rtv", "nominate", "timeleft"];
   [JsonPropertyName("WebHookUrl")]
-  public string WebHookUrl { get; set; } = "";
+  public string WebHookUrl { get; set; } = ""; // No longer needed - using https://admin.affinitycs2.com/api/calladmin instead
   [JsonPropertyName("Debug")]
   public bool Debug { get; set; } = false;
   [JsonPropertyName("UseCenterHtmlMenu")]
@@ -111,7 +112,7 @@ public class Commands
   public class ReportHandledCommand
   {
     [JsonPropertyName("Enabled")]
-    public bool Enabled { get; set; } = true;
+    public bool Enabled { get; set; } = false;
     [JsonPropertyName("Prefix")]
     public string[] Prefix { get; set; } = ["report_handled", "handled"];
     [JsonPropertyName("Permission")]

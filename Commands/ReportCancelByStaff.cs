@@ -3,6 +3,7 @@ using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Commands;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace CallAdmin;
 public partial class CallAdmin
@@ -40,7 +41,7 @@ public partial class CallAdmin
 
       if (Config.Commands.ReportCanceled.ByStaff.DeleteOrEditEmbed == 1)
       {
-        bool deleteMessage = await DeleteMessageOnDiscord(getReport.message_id);
+        bool deleteMessage = await CancelReportInAPI(getReport.message_id);
 
         if (!deleteMessage)
         {
@@ -50,28 +51,27 @@ public partial class CallAdmin
       }
       else
       {
-        string sendMessageToDiscord = await
-        SendMessageToDiscord(
-          Payload(new()
-          {
-            AuthorName = getReport.victim_name,
-            AuthorSteamId = getReport.victim_steamid,
-            TargetName = getReport.suspect_name,
-            TargetSteamId = getReport.suspect_steamid,
-            HostName = getReport.host_name,
-            MapName = mapName,
-            HostIp = getReport.host_ip,
-            Reason = getReport.reason,
-            Identifier = getReport.identifier,
-            AdminName = playerName,
-            AdminSteamId = playerSteamid,
-            Type = "EmbedReportCanceled"
-          }
-          ),
-          getReport.message_id
-      );
+        // Create a simplified payload with just the required information
+        var simplifiedPayload = new
+        {
+          author_name = getReport.victim_name,
+          author_steamid = getReport.victim_steamid,
+          target_name = getReport.suspect_name,
+          target_steamid = getReport.suspect_steamid,
+          reason = getReport.reason,
+          server_name = getReport.host_name,
+          server_ip = getReport.host_ip,
+          map_name = mapName,
+          identifier = getReport.identifier,
+          admin_name = playerName,
+          admin_steamid = playerSteamid,
+          action = "cancel",
+          canceled_by_author = false
+        };
+        
+        string sendMessageToDiscord = await SendMessageToAPI(JsonSerializer.Serialize(simplifiedPayload));
 
-        if (!sendMessageToDiscord.All(char.IsDigit))
+        if (sendMessageToDiscord == "There was an error sending the data to API" || sendMessageToDiscord == "Unable to get response ID")
         {
           SendMessageToPlayer(player, $"{Localizer["Prefix"]} {Localizer["WebhookError"]}");
           Logger.LogError(sendMessageToDiscord);
