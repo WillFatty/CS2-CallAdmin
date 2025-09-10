@@ -30,7 +30,7 @@ public partial class CallAdmin
       Logger.LogInformation($"Sending cancel request to API: {jsonString}");
       
       // Post to the main endpoint rather than a separate cancel endpoint
-      var result = await httpClient.PostAsync("https://admin.affinitycs2.com/api/calladmin", content);
+      var result = await httpClient.PostAsync("https://bot.affinitycs2.com/api/calladmin", content);
       
       // Read and log the response for debugging
       var responseContent = await result.Content.ReadAsStringAsync();
@@ -72,7 +72,7 @@ public partial class CallAdmin
       Logger.LogInformation($"Marking report as handled: {jsonContent}");
       
       // Post to the main endpoint rather than a separate handled endpoint
-      var result = await httpClient.PostAsync("https://admin.affinitycs2.com/api/calladmin", content);
+      var result = await httpClient.PostAsync("https://bot.affinitycs2.com/api/calladmin", content);
       
       // Read and log the response for debugging
       var responseContent = await result.Content.ReadAsStringAsync();
@@ -107,7 +107,7 @@ public partial class CallAdmin
       Logger.LogInformation($"Sending simplified report to API: {jsonObj}");
       
       // Use await properly instead of .Result to avoid potential deadlocks
-      var result = await httpClient.PostAsync("https://admin.affinitycs2.com/api/calladmin", content);
+      var result = await httpClient.PostAsync("https://bot.affinitycs2.com/api/calladmin", content);
 
       // Read the response content
       var responseContent = await result.Content.ReadAsStringAsync();

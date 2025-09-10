@@ -41,7 +41,7 @@ public class CallAdminConfig : BasePluginConfig
   [JsonPropertyName("ReasonsToIgnore")]
   public string[] ReasonsToIgnore { get; set; } = ["rtv", "nominate", "timeleft"];
   [JsonPropertyName("WebHookUrl")]
-  public string WebHookUrl { get; set; } = ""; // No longer needed - using https://admin.affinitycs2.com/api/calladmin instead
+  public string WebHookUrl { get; set; } = ""; // No longer needed - using https://servers.affinitycs2.com/api/calladmin instead
   [JsonPropertyName("Debug")]
   public bool Debug { get; set; } = false;
   [JsonPropertyName("UseCenterHtmlMenu")]
